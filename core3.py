@@ -127,6 +127,21 @@ def load_images(image_folder: str, num_frames: int) -> list[pygame.Surface]:
     return images
 
 
+def render_button_text(paused, font):
+    """
+    Renders the button text based on the paused state.
+    
+    Parameters:
+    - paused (bool): Whether the animation is paused.
+    - font (pygame.font.Font): Font object for rendering text.
+    
+    Returns:
+    - pygame.Surface: Rendered text surface.
+    """
+    text = "Continue" if paused else "Pause"
+    return font.render(text, True, BUTTON_TEXT_COLOR)
+
+
 def animate_julia_sets(
     image_folder: str, 
     num_frames: int, 
@@ -161,25 +176,110 @@ def animate_julia_sets(
     # Set up the display window, adding extra height for the slider
     window_height = image_height + 100  # Extra space for the slider
     screen = pygame.display.set_mode((image_width, window_height))
-    pygame.display.set_caption("Julia Set Animation")
+    pygame.display.set_caption("Julia Set Animation with Speed Slider")
     
     # Create a clock object to manage the frame rate
     clock = pygame.time.Clock()
     fps = initial_speed  # Current frame rate
     
+    # Animation state variables
     running = True
     paused = False
     frame_idx = 0
-
+    
+    # Initialize font for text rendering
+    pygame.font.init()
+    font = pygame.font.SysFont(None, 24)
+    
+    # Define slider properties
+    slider_x, slider_y = SLIDER_POS
+    slider_end_x = slider_x + SLIDER_WIDTH
+    knob_x = slider_x + (fps - MIN_FPS) / (MAX_FPS - MIN_FPS) * SLIDER_WIDTH
+    knob_y = slider_y + SLIDER_HEIGHT // 2
+    dragging = False  # Indicates if the slider knob is being dragged
+    
+    # Update button position based on image_width
+    BUTTON_POS = (slider_end_x + 50, slider_y + SLIDER_HEIGHT // 2 - BUTTON_HEIGHT // 2)  # Positioned top-right with 50px padding
+    button_rect = pygame.Rect(BUTTON_POS[0], BUTTON_POS[1], BUTTON_WIDTH, BUTTON_HEIGHT)
+    button_hover = False  # Indicates if the mouse is hovering over the button
+    
     while running:
-        screen.fill((255, 255, 255))
+        mouse_pos = pygame.mouse.get_pos()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_x, mouse_y = event.pos
+                # Check if the slider knob is clicked
+                distance = ((mouse_x - knob_x)**2 + (mouse_y - knob_y)**2)**0.5
+                if distance <= KNOB_RADIUS:
+                    dragging = True
+                # Check if the button is clicked
+                if button_rect.collidepoint(event.pos):
+                    paused = not paused  # Toggle pause/play
+                    if paused:
+                        print("Animation paused.")
+                    else:
+                        print("Animation playing.")
+            
+            elif event.type == pygame.MOUSEBUTTONUP:
+                dragging = False
+            
+            elif event.type == pygame.MOUSEMOTION:
+                if dragging:
+                    mouse_x, _ = event.pos
+                    # Constrain the knob within the slider track
+                    knob_x = max(slider_x, min(mouse_x, slider_end_x))
+                    # Update FPS based on knob position
+                    fps = MIN_FPS + (knob_x - slider_x) / SLIDER_WIDTH * (MAX_FPS - MIN_FPS)
+                    fps = round(fps)
+                # Update button hover state
+                if button_rect.collidepoint(event.pos):
+                    button_hover = True
+                else:
+                    button_hover = False
         
         if not paused:
+            screen.fill((255, 255, 255))
+
             # Display the current frame image
             screen.blit(images[frame_idx], (0, 105))  # Reserve top space for the slider
             
             # Move to the next frame
             frame_idx = (frame_idx + 1) % len(images)
+        
+        # Draw the slider background
+        pygame.draw.rect(screen, BACKGROUND_COLOR, (0, 0, image_width, 100))
+        
+        # Draw the slider track with rounded corners
+        pygame.draw.rect(screen, (200, 200, 200), (slider_x, slider_y, SLIDER_WIDTH, SLIDER_HEIGHT), border_radius=5)
+        
+        # Draw the slider knob with a white border for better visibility
+        pygame.draw.circle(screen, (100, 100, 255), (int(knob_x), int(knob_y)), KNOB_RADIUS)
+        pygame.draw.circle(screen, (255, 255, 255), (int(knob_x), int(knob_y)), KNOB_RADIUS, 2)  # Knob border
+        
+        # Draw the pause/continue button
+        if button_rect.collidepoint(mouse_pos):
+            current_button_color = BUTTON_HOVER_COLOR
+        else:
+            current_button_color = BUTTON_COLOR
+        pygame.draw.rect(screen, current_button_color, button_rect, border_radius=5)
+        
+        # Render and display the button text
+        button_text_surface = render_button_text(paused, font)
+        button_text_rect = button_text_surface.get_rect(center=button_rect.center)
+        screen.blit(button_text_surface, button_text_rect)
+        
+        # Render and display the FPS text
+        fps_text = font.render(f"FPS: {fps}", True, (255, 255, 255))
+        screen.blit(fps_text, (slider_x, slider_y - 30))
+        
+        # Render and display the minimum and maximum FPS labels
+        # min_fps_text = font.render(str(MIN_FPS), True, (255, 255, 255))
+        # max_fps_text = font.render(str(MAX_FPS), True, (255, 255, 255))
+        # screen.blit(min_fps_text, (slider_x - 10, slider_y + SLIDER_HEIGHT + 5))
+        # screen.blit(max_fps_text, (slider_end_x - max_fps_text.get_width() + 10, slider_y + SLIDER_HEIGHT + 5))
         
         # Update the display
         pygame.display.flip()
@@ -188,9 +288,59 @@ def animate_julia_sets(
         clock.tick(fps)
     
     # Quit Pygame
-    pygame.quit() 
+    pygame.quit()
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Julia Set Animation Generator and Viewer")
+    parser.add_argument(
+        '--generate', 
+        action='store_true', 
+        help="Generate Julia set frames."
+    )
+    parser.add_argument(
+        '--num_frames', 
+        type=int, 
+        default=200, 
+        help="Number of frames to generate or animate."
+    )
+    parser.add_argument(
+        '--output_folder', 
+        type=str, 
+        default='julia_frames', 
+        help="Folder to save or load frames."
+    )
+    parser.add_argument(
+        '--colormap', 
+        type=str, 
+        choices=['plasma', 'magma', 'viridis', 'inferno'],
+        default='inferno', 
+        help="Colormap chosen from 'plasma', 'magma', 'viridis' and 'inferno'."
+    )
+
+    args = parser.parse_args()
+
+    generate = args.generate
+    if not os.path.exists(args.output_folder):
+        generate = True
+    
+    if generate:
+        print("Starting frame generation...")
+        generate_julia_animation_frames(
+            num_frames=args.num_frames, 
+            output_folder=args.output_folder, 
+            colormap=args.colormap
+        )
+    
+    print("Starting animation...")
+    animate_julia_sets(
+        image_folder=args.output_folder, 
+        num_frames=args.num_frames, 
+        initial_speed=60
+    )
 
 
 if __name__ == '__main__':
-    # generate_julia_animation_frames(200)
-    animate_julia_sets('julia_frames', 200)
+    main()
