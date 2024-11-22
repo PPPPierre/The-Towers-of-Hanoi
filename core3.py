@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pygame
 import math
+import sys
 from typing import Literal
 from tqdm import tqdm
 
@@ -12,6 +13,23 @@ MAXITER = 100
 NUM_CDS = 200  # Number of coordinates
 CD_MIN = -2.0
 CD_MAX = 2.0
+
+# Constants for slider dimensions and positions
+MIN_FPS = 1
+MAX_FPS = 120
+SLIDER_WIDTH = 250
+SLIDER_HEIGHT = 10
+SLIDER_POS = (50, 50)  # Position of the slider track (top-left corner)
+KNOB_RADIUS = 10
+BACKGROUND_COLOR = (30, 30, 30)  # Background color for the slider area
+
+# Button properties
+BUTTON_WIDTH = 80
+BUTTON_HEIGHT = 40
+BUTTON_POS = (0, 25)  # Will be updated based on image_width
+BUTTON_COLOR = (70, 130, 180)  # Steel Blue
+BUTTON_HOVER_COLOR = (100, 149, 237)  # Cornflower Blue
+BUTTON_TEXT_COLOR = (255, 255, 255)  # White
 
 
 def julia(j_p: complex, c: complex) -> int:
@@ -97,5 +115,82 @@ def generate_julia_animation_frames(
     print(f"All {num_frames} frames have been generated in the '{output_folder}' folder.")
 
 
+def load_images(image_folder: str, num_frames: int) -> list[pygame.Surface]:
+    images = []
+    for idx in range(num_frames):
+        filename = os.path.join(image_folder, f"frame_{idx:03d}.png")
+        if not os.path.exists(filename):
+            print(f"Warning: {filename} does not exist.")
+            continue
+        image = pygame.image.load(filename)
+        images.append(image)
+    return images
+
+
+def animate_julia_sets(
+    image_folder: str, 
+    num_frames: int, 
+    initial_speed: float = 30.0
+):
+    """
+    Displays an animation of Julia sets using Pygame with real-time speed control and pause/play functionality.
+
+    Parameters:
+    - image_folder (str): Path to the folder containing image frames.
+    - num_frames (int): Number of frames in the animation.
+    - initial_speed (float): Initial frames per second (FPS).
+
+    Returns:
+    - None
+    """
+    # Initialize Pygame
+    pygame.init()
+    
+    # Load images
+    print("Loading images...")
+    images = load_images(image_folder, num_frames)
+    if not images:
+        print("No images loaded. Exiting program.")
+        pygame.quit()
+        sys.exit()
+    print(f"Loaded {len(images)} image frames.")
+    
+    # Get image dimensions from the first image
+    image_width, image_height = images[0].get_size()
+    
+    # Set up the display window, adding extra height for the slider
+    window_height = image_height + 100  # Extra space for the slider
+    screen = pygame.display.set_mode((image_width, window_height))
+    pygame.display.set_caption("Julia Set Animation")
+    
+    # Create a clock object to manage the frame rate
+    clock = pygame.time.Clock()
+    fps = initial_speed  # Current frame rate
+    
+    running = True
+    paused = False
+    frame_idx = 0
+
+    while running:
+        screen.fill((255, 255, 255))
+        
+        if not paused:
+            # Display the current frame image
+            screen.blit(images[frame_idx], (0, 105))  # Reserve top space for the slider
+            
+            # Move to the next frame
+            frame_idx = (frame_idx + 1) % len(images)
+        
+        # Update the display
+        pygame.display.flip()
+        
+        # Control the frame rate
+        clock.tick(fps)
+    
+    # Quit Pygame
+    pygame.quit() 
+
+
 if __name__ == '__main__':
-    generate_julia_animation_frames(10)
+    # generate_julia_animation_frames(200)
+    animate_julia_sets('julia_frames', 200)
